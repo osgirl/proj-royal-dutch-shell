@@ -1,2 +1,2 @@
-# c-template-simple
-A simple template for course assignments based on C language
+# Your project name
+Please, edit to fit your own project's details
