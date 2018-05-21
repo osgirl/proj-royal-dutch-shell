@@ -24,8 +24,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <posixeg/tparse.h>
-#include <posixeg/debug.h>
+#include "tparse.h"
+#include "debug.h"
 
 #define PROMPT "RoyalDutchShell$"
 
@@ -34,7 +34,7 @@ typedef struct process
 {
 	int pid; 		// process id
 	int status;		// 0 - stopped | 1 - running
-	int execution; 	// 0 - background | 1 - foreground | 2 - not running
+	int foreground; 	// 0 - background | 1 - foreground | 2 - not running
 	char *name;
 } process;
 
@@ -61,7 +61,7 @@ int main (int argc, char **argv)
 
 		printf ("%s ", PROMPT);
 		fflush (stdout);
-		if(read_command_line(command_line) < 0);	      	//NO INPUT YET
+		if(read_command_line(command_line) < 0)	      	//NO INPUT YET
 			getchar();
 		else
 		{
@@ -79,7 +79,7 @@ int main (int argc, char **argv)
 				}
 
 
-				if ( RUN_FOREGROUND(pipeline))
+				/*if ( RUN_FOREGROUND(pipeline))
 				{
 					printf ("  Run pipeline in foreground\n");
 					process->foreground = 1;
@@ -88,7 +88,7 @@ int main (int argc, char **argv)
 				{
 					printf ("  Run pipeline in background\n");
 					process->foreground = 0;
-				}
+				}*/
 
 			}
 			if ( REDIRECT_STDIN(pipeline))
