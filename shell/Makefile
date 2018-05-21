@@ -1,5 +1,5 @@
 CFILES := main.c parser.c utils.c
-PROG := sevensh
+PROG := royaldutch
 
 CC = gcc
 CPP_FLAGS = -I. -Wall -Werror -std=c89 --pedantic-errors -D_POSIX_C_SOURCE=200112L 
