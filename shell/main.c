@@ -1,5 +1,5 @@
-/* main.c 
-Copyright (c) 2018, 
+/* main.c
+Copyright (c) 2018,
 
 Igor Guilherme Bianchi
 Lucas Martins Macedo
@@ -26,84 +26,83 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include "tparse.h"
 #include "debug.h"
+#include <unistd.h>
+#include <stdbool.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 
-#define PROMPT "RoyalDutchShell$"
+#define PROMPT "$"
+
+int main(int argc, char **argv) {
+    int aux;
+    buffer_t *commandLine = new_command_line();
+    pipeline_t *pipeline = new_pipeline();
+
+    while (true) {
+        /* Prompt */
+        printf("%s ", PROMPT);
+        fflush(stdout);
+        aux = read_command_line(commandLine);
+        sysfatal(aux < 0);
+
+        if (!parse_command_line(commandLine, pipeline) && pipeline->ncommands > 0) {
+            int ret;
+            int prevOut = dup(1);
+            int prevIn = dup(0);
+            /*TODO error redirection*/
+
+            if (pipeline->ncommands > 1) {
+                printf("Hold the door! Pipes are not yet available in this version.\n"
+                       "Running only the first command from the pipeline.");
+            }
+
+            if (REDIRECT_STDOUT(pipeline)) {
+                int out;
+
+                out = open(pipeline->file_out, O_RDWR | O_CREAT | O_TRUNC, 0664);
+                if (out != -1) {
+                    dup2(out, 1);
+                    close(out);
+                } else {
+                    debug(true && "open failed", "Couldn\'t open file for output redirection");
+                }
+            }
+
+            if (REDIRECT_STDIN(pipeline)) {
+                int in;
+
+                in = open(pipeline->file_in, O_RDONLY);
+                if (in != -1) {
+                    dup2(in, 0);
+                    close(in);
+                } else {
+                    debug(true && "open failed", "Couldn\'t open file for input redirection");
+                }
+            }
+
+            ret = fork();
+            if (ret > 0) {
+                /* Parent process */
+                int status; /* <- Use this for child information */
+                waitpid(ret, &status, 0);
+                dup2(1, prevOut);
+                dup2(0, prevIn);
+            } else if (ret == 0) {
+                /* Child process  */
+                execvp(pipeline->command[0][0], pipeline->command[0]);
+
+                /* Error on changing process image */
+                sysfatal("execvp failed"); /* Fail for now */
+            } else {
+                /* Error on fork */
+                sysfatal("fork failed");
+            }
+        }
+    }
+
+    release_command_line(commandLine);
+    release_pipeline(pipeline);
 
 
-typedef struct process
-{
-	int pid; 		// process id
-	int status;		// 0 - stopped | 1 - running
-	int foreground; 	// 0 - background | 1 - foreground | 2 - not running
-	char *name;
-} process;
-
-/* void test(void); */
-
-int go_on = 1;			/* This variable controls the main loop. */
-
-int main (int argc, char **argv)
-{
-	buffer_t *command_line;
-	int i, j, aux;
-
-	pipeline_t *pipeline;
-
-	command_line = new_command_line (); 
-
-	pipeline = new_pipeline ();
-
-	/* This is the main loop. */
-
-	while (go_on)
-	{
-	/* Prompt. */
-
-		printf ("%s ", PROMPT);
-		fflush (stdout);
-		if(read_command_line(command_line) < 0)	      	//NO INPUT YET
-			getchar();
-		else
-		{
-			if (!parse_command_line (command_line, pipeline) || 1)
-			{
-				//THERE'S SOMETHING ON command_line OR pipeline TO RUN
-				printf ("  Pipeline has %d command(s)\n", pipeline->ncommands);
-
-				for (i=0; pipeline->command[i][0]; i++)
-				{
-					printf ("  Command %d has %d argument(s): ", i, pipeline->narguments[i]);
-  					for (j=0; pipeline->command[i][j]; j++)
-						printf ("%s \n", pipeline->command[i][j]);
- 			 
-				}
-
-
-				/*if ( RUN_FOREGROUND(pipeline))
-				{
-					printf ("  Run pipeline in foreground\n");
-					process->foreground = 1;
-				}
-				else
-				{
-					printf ("  Run pipeline in background\n");
-					process->foreground = 0;
-				}*/
-
-			}
-			if ( REDIRECT_STDIN(pipeline))
-				printf ("  Redirect input from %s\n", pipeline->file_in);
-			if ( REDIRECT_STDOUT(pipeline))
-				printf ("  Redirect output to  %s\n", pipeline->file_out);
-
-			/* This is where we would fork and exec. */
-
-		}	
-
-		release_command_line (command_line);
-		release_pipeline (pipeline);
-
-		return EXIT_SUCCESS;
-	}
+    return EXIT_SUCCESS;
 }
- 
