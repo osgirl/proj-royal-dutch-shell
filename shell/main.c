@@ -25,96 +25,55 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include "tparse.h"
-#include <assert.h>
 #include <unistd.h>
-#include <sys/wait.h>
-#include <fcntl.h>
 #include <string.h>
-#include <errno.h>
-#include "functions.h"
 
-int main(int argc, char **argv) {
-    buffer_t *command_line;
-    int aux, pid = 0;
+#include "tparse.h"
+#include "job.h"
+#include "royaldutch.h"
 
-    pipeline_t *pipeline;
+job* jobs_head;
+bool on_terminal;
+int shell_in = STDIN_FILENO;
+int shell_pgid;
+struct termios io_flags;
+
+#define BUILTIN_CONDITION(name) (job->number_procs > 0 && strcmp(#name, job->procs[0].argv[0]) == 0)
+#define BUILTIN_ON_FUNCTION(name) {if(BUILTIN_CONDITION(name)) {builtin_ ## name(job); continue;}}
+
+int main(int argc, char** argv) {
+    buffer_t* command_line;
+
+    shell_init();
     command_line = new_command_line();
-    pipeline = new_pipeline();
-
-    /* Set shell to ingore most signals */
-    set_signals(SIG_IGN);
 
     while (true) {
-        /* Prompt. */
-        printf("%s ", PROMPT);
-        fflush(stdout);
-        aux = read_command_line(command_line);
-        if (aux == 0) {
-            break;
-        }
-        assert (aux > 0);
+        int read;
+        job* job;
 
-        /* Parse */
-        if (!parse_command_line(command_line, pipeline)) {
-            int pipes[2];
-            int in_file = STDIN_FILENO;
-            int out_file = STDOUT_FILENO;
-            int i;
+        notify_background_jobs();
+        read = prompt(command_line, &job);
+        if (!job) { if (read == 0) { break; } else { continue; }}
+        put_job(job);
 
-            if (pipeline->ncommands > 0 && strcmp("exit", pipeline->command[0][0]) == 0) {
-                /* exit builtin to leave the shell */
-                break;
-            }
+        BUILTIN_ON_FUNCTION(cd);
+        BUILTIN_ON_FUNCTION(jobs);
+        BUILTIN_ON_FUNCTION(fg);
+        BUILTIN_ON_FUNCTION(bg);
+        if (BUILTIN_CONDITION(exit)) { break; }
 
-            /* change input file */
-            if (REDIRECT_STDIN(pipeline)) {
-                in_file = open(pipeline->file_in, O_RDONLY);
-                assert(in_file != -1);
-            }
+        launch_job(job);
 
-            for (i = 0; i < pipeline->ncommands; i++) {
-                if (i == pipeline->ncommands - 1) { /* is last process? */
-                    /* change output file */
-                    out_file = STDOUT_FILENO;
-                    if (REDIRECT_STDOUT(pipeline)) {
-                        out_file = open(pipeline->file_out, O_RDWR | O_CREAT | O_TRUNC, 0664);
-                        assert(out_file != -1);
-                    }
-                } else {
-                    /* pipe between processes */
-                    assert(pipe(pipes) == 0);
-                    out_file = pipes[1];
-                }
-
-                pid = launch(pipeline->command[i], in_file, out_file);
-
-                /* clear already redirected IO */
-                if (in_file != STDIN_FILENO) {
-                    close(in_file);
-                }
-                if (out_file != STDOUT_FILENO) {
-                    close(out_file);
-                }
-
-                /* next input is piped from this output */
-                in_file = pipes[0];
-            }
-        }
-
-        /* Parent */
-        if (RUN_FOREGROUND(pipeline)) {
-            /* Wait for the last procces of the pipeline */
-            int status;
-            waitpid(pid, &status, 0);
+        if (job->background) {
+            printf("[%d] started\n", job->pgid);
         } else {
-            printf("Background job control not yet implemented\n");
-            fflush(stdout);
+            wait_foreground_job(job);
         }
     }
 
+    shell_release();
+
     release_command_line(command_line);
-    release_pipeline(pipeline);
 
     return EXIT_SUCCESS;
 }
