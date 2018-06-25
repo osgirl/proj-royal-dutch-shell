@@ -1,4 +1,4 @@
-CFILES := main.c parser.c utils.c
+CFILES := main.c parser.c utils.c job.c royaldutch.c
 PROG := royaldutch
 
 CC = gcc
