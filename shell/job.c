@@ -19,15 +19,71 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/wait.h>
+#include <string.h>
+#include <fcntl.h>
 
 #include "job.h"
 #include "royaldutch.h"
 
-/**
- * Launch a process with io redirection
- */
+job* job_from_pipeline(pipeline_t* pipeline, char* command_line) {
+    int i, j;
+    job* job = calloc(1, sizeof(*job));
+
+    /* Open input file or use stdin, it is closed upon running */
+    if (REDIRECT_STDIN(pipeline)) {
+        job->in = open(pipeline->file_in, O_RDONLY);
+        assert(job->in != -1);
+    } else {
+        job->in = STDIN_FILENO;
+    }
+
+    /* Open output file or use stdout, it is closed upon running */
+    if (REDIRECT_STDOUT(pipeline)) {
+        job->out = open(pipeline->file_out, O_RDWR | O_CREAT | O_TRUNC, 0664);
+        assert(job->out != -1);
+    } else {
+        job->out = STDOUT_FILENO;
+    }
+    /* stdeer redirection is not supported by the foo shell parser */
+    job->err = STDERR_FILENO;
+
+    job->background = RUN_BACKGROUND(pipeline);
+
+    job->command_line = stringdup(command_line);
+
+    /* Populate processes */
+    job->number_procs = (size_t) pipeline->ncommands;
+    job->procs = calloc(job->number_procs, sizeof(*job->procs));
+
+    for (i = 0; i < job->number_procs; ++i) {
+        process* proc = &job->procs[i];
+        proc->argc = (size_t) pipeline->narguments[i];
+        proc->argv = malloc((proc->argc + 1) * sizeof(*proc->argv));
+        proc->argv[proc->argc] = 0;
+        for (j = 0; j < proc->argc; ++j) {
+            char* command = NULL;
+            if(pipeline->command[i][j][0] == '$' && strlen(pipeline->command[i][j]) >= 2) {
+                command = getenv(pipeline->command[i][j]+1);
+                if(command) {
+                    command = stringdup(command);
+                } else {
+                    command = stringdup("");
+                }
+            } else {
+                command = stringdup(pipeline->command[i][j]);
+            }
+            proc->argv[j] = command;
+        }
+    }
+
+    return job;
+}
+
 void launch_process(struct job* job, process* proc, int in_file, int out_file) {
     int pid;
+
+    /* TODO: we have really no good way to say execvp has failed, we should try changing the fork()
+     * to a posix_spawn() (or vfork() but that seems creepy) */
     pid = fork();
     if (pid == 0) {
         /* Child */
@@ -56,7 +112,7 @@ void launch_process(struct job* job, process* proc, int in_file, int out_file) {
         }
 
         execvp(proc->argv[0], proc->argv);
-        print_error("execvp");
+        print_error("execvp"); /* TODO: signal parent process (shell) */
         exit(1);
     } else if (pid == -1) {
         /* Error */
@@ -163,6 +219,49 @@ void remove_job(struct job* toRemove) {
     }
 }
 
+job* find_job(int pgid) {
+    job* j;
+    if (pgid == 0) return NULL;
+    for (j = jobs_head->next; j; j = j->next) {
+        if (j->pgid == pgid) {
+            return j;
+        }
+    }
+
+    return NULL;
+}
+
+job* find_latest_job(job_search search) {
+    job* j, * latest;
+    for (latest = j = jobs_head->next; j; j = j->next) {
+        if (j->time_run > latest->time_run) {
+            bool stopped = job_stopped(j);
+            if((search == SEARCH_RUNNING && stopped)
+               ||search == SEARCH_STOPPED && !stopped) {
+                continue;
+            } else {
+                latest = j;
+            }
+        }
+    }
+    return latest;
+}
+
+bool continue_job(struct job* job) {
+    if (killpg(job->pgid, SIGCONT) < 0) {
+        return false;
+    } else {
+        int i;
+        for (i = 0; i < job->number_procs; ++i) {
+            process* proc = &job->procs[i];
+            proc->stopped = false;
+        }
+        job->notified = false;
+        job->time_run = time(NULL);
+        return true;
+    }
+}
+
 bool jobs_update_status(int pid, int status) {
     job* j;
     if (pid <= 0) { return false; }
@@ -187,54 +286,11 @@ bool jobs_update_status(int pid, int status) {
     return false;
 }
 
-char* job_str_status(job* j) {
+const char* job_str_status(job* j) {
     assert(j);
     if (job_completed(j))
         return "Completed";
     if (job_stopped(j))
-        return "Stopped";
+        return "Suspended";
     return "Running";
-}
-
-job* find_job(int pgid) {
-    job* j;
-    if (pgid == 0) return NULL;
-    for (j = jobs_head->next; j; j = j->next) {
-        if (j->pgid == pgid) {
-            return j;
-        }
-    }
-
-    return NULL;
-}
-
-job* find_latest_job(job_search search) {
-    job* j, * latest;
-    for (latest = j = jobs_head->next; j; j = j->next) {
-        if (j->time_run > latest->time_run) {
-            bool stopped = job_stopped(j);
-            if((search == SEARCH_RUNNING && stopped)
-              ||search == SEARCH_STOPPED && !stopped) {
-                continue;
-            } else {
-                latest = j;
-            }
-        }
-    }
-    return latest;
-}
-
-bool continue_job(struct job* job) {
-    if (killpg(job->pgid, SIGCONT) < 0) {
-        return false;
-    } else {
-        int i;
-        for (i = 0; i < job->number_procs; ++i) {
-            process* proc = &job->procs[i];
-            proc->stopped = false;
-        }
-        job->notified = false;
-        job->time_run = time(NULL);
-        return true;
-    }
 }
