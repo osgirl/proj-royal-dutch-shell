@@ -26,38 +26,82 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define PROMPT "RoyalDutch$"
 
+
+/*****************************
+ * Globals
+ *****************************/
+/* List of child jobs */
 extern job* jobs_head;
+
+/* Can interact with user */
 extern bool on_terminal;
+
+/* File descriptor for shell stdin */
 extern int shell_in;
+
+/* Shell's own PGID */
 extern int shell_pgid;
+
+/* Shell IO modes */
 extern struct termios io_flags;
 
+/******************************
+ * Shell functions
+ ******************************/
+/* Initialize the shell globals */
 void shell_init();
 
+/* Release the shell globals */
 void shell_release();
 
+/* Print a default formatted error message (uses errno) */
 void print_error(char* message);
 
-int prompt(buffer_t* buffer, struct job** job);
-
-job* job_from_pipeline(pipeline_t* pipeline, char* command_line);
-
-void wait_foreground_job(struct job* job);
-void notify_background_jobs();
-
-void set_signals(__sighandler_t handler, bool include_sigtstp);
-void sigtstp_handler(int signo);
-
+/* Gets the name of the last folder in hierarchy */
 char* last_dir(char* path);
 
-/* *
- * BUILT-IN FUNCTIONS
- * */
+/* Prompt user for commands */
+int prompt(buffer_t* buffer, struct job** job);
+
+/* Set child as foreground process and wait for it to finish */
+void wait_foreground_job(struct job* job);
+
+/* Update status about background process and notifies the user */
+void notify_background_jobs();
+
+/* Set handler value to SIGINT, SIGQUIT, SIGTTIN, SIGTTOU
+ * and override SIGTSTP if needed */
+void set_signals(__sighandler_t handler, bool override_sigtstp);
+
+/* Default shell SIGTSTP (^Z) handler
+ * propagate the signal to lastest running job */
+void sigtstp_handler(int signo);
+
+/**************************************************
+ * Built-in functions
+ **************************************************/
+
+/** Move the working directory */
 void builtin_cd(struct job* job);
 
+/** List current jobs */
 void builtin_jobs(struct job* job);
 
+/** Resume stopped job on foreground */
 void builtin_fg(struct job* job);
+
+/** Resume stopped job on background */
 void builtin_bg(struct job* job);
+
+/**************************************************
+ * Built-in help functions
+ **
+ ** Print the help text for the command
+ **************************************************/
+void builtin_help_cd();
+void builtin_help_jobs();
+void builtin_help_fg();
+void builtin_help_bg();
+void builtin_help_exit();
 
 #endif

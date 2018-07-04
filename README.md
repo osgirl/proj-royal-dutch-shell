@@ -1,11 +1,35 @@
 # Royal Dutch Shell
 
 
-INSTRUNCTION TO RUN ROYAL DUTCH SHELL
+To compile:
 
-Run the commands:
+    $make
 
-$ make
+To run:
 
-$ ./royaldutch
+    $./royaldutch
 
+features:
+
+`pipe`, example:
+
+    ls | sort | wc
+
+`IO Redirection`, example:
+
+    ls > file_list.txt
+    cat < file_list.txt
+
+`cd`, example:
+
+    cd
+    cd ~/
+    cd ..
+
+background, example:
+
+    ping -c 10 example.com &
+
+    fg
+    ^z
+    bg
