@@ -1,0 +1,21 @@
+
+Review
+
+Hm... buinding information in README does not work.
+Where is the Makefile?
+There is an automake script, but no autoconf script...
+
+Ok, trying to compile directly with gcc
+
+Current score 8.5
+
+Please fix this issues in order to improve your score.
+--------------------------------------------------------------------------------
+
+* Warnings when compiling wihth -Wall --ansi -D_POSIX_C_SOURCE=200809L
+
+* Complete Autotools installation (see POSIXeg's example proj-004)
+
+* Use system-installed libposixeg instead of borring parser code.
+
+
