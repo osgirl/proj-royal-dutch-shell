@@ -16,6 +16,6 @@ Please fix this issues in order to improve your score.
 
 * Complete Autotools installation (see POSIXeg's example proj-004)
 
-* Use system-installed libposixeg instead of borring parser code.
+* Use system-installed libposixeg instead of boring parser code.
 
 
